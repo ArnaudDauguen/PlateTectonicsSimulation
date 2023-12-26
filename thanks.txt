@@ -1,0 +1,1 @@
+Thanks to Justin S. and Théo H. for their contribution on the base polygonal cells algorithm (Voronoi/Delaunay part) !!
