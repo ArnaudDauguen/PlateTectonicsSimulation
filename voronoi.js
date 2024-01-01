@@ -226,6 +226,16 @@ class Point {
             && Math.abs(this.y - point.y) < epsilon
             && Math.abs(this.z - point.z) < epsilon
     }
+
+    Translate(x, y, z = 0){
+        if(x != 0)
+            this.x = this.x + x
+        if(y != 0)
+            this.y = this.y + y
+        if(z != 0)
+            this.z = this.z + z
+        return this
+    }
 }
 
 class CloudPoints {
@@ -386,7 +396,7 @@ class Circle {
     }
 }
 
-function main(DEBUG = false) {
+function main(shouldReplaceMapOnTopLeft = false, DEBUG_P1 = false, DEBUG_P2 = false, DEBUG_P3 = false) {
     const POINT_QTY = 7000
     const W_WIDTH = 1280
     const W_HEIGH = 720
@@ -397,18 +407,21 @@ function main(DEBUG = false) {
 
     const widthOffset = .20 * W_WIDTH
     const heighOffset = .20 * W_HEIGH
-    const westBound = widthOffset
-    const eastBound = W_WIDTH + widthOffset
-    const northBound = heighOffset
-    const southBound = W_HEIGH + heighOffset
 
-    const mapTopLeftPoint = new Point(westBound, northBound)
-    const mapBottomRightPoint = new Point(eastBound, southBound)
+    let westBound = widthOffset
+    let eastBound = widthOffset + W_WIDTH
+    let northBound = heighOffset
+    let southBound = heighOffset + W_HEIGH
+
+    const NECorner = new Point(eastBound, northBound)
+    const SECorner = new Point(eastBound, southBound)
+    const SWCorner = new Point(westBound, southBound)
+    const NWCorner = new Point(westBound, northBound)
 
     let cp = new CloudPoints(POINT_QTY,
         0, eastBound + 2 * widthOffset,
         0, southBound + 2 * heighOffset
-    )
+    ) // Draw arena = bounds + offset on each sides
     cp.canvas.ctx.scale(1, 1)
     
     time = new Date()
@@ -430,16 +443,6 @@ function main(DEBUG = false) {
             poly.BuildUp()
             voronoi.push(poly)
         }
-
-        if (isLastIT || iteration === -1){
-            // voronoi
-            //     .filter(poly => poly.center.x > widthOffset && poly.center.x < eastBound && poly.center.y > heighOffset && poly.center.y < southBound)
-            //     .forEach(poly => cp.canvas.DrawPolygon(poly.edges, c[iteration], 1))
-            if(DEBUG){
-                cp.canvas.DrawPixle(mapTopLeftPoint, "blue", 20)
-                cp.canvas.DrawPixle(mapBottomRightPoint, "blue", 20)
-            }
-        }
         
         let points = new Array()
         for (let poly of voronoi) {
@@ -454,12 +457,12 @@ function main(DEBUG = false) {
         cp.points = points
     }
 
-    console.log("1st poly map, time :", Math.abs(time - (new Date())))
+    console.log("I. 1st poly map, time :", Math.abs(time - (new Date())))
 
 
-    // II. MERGING CELLS
-    // 1. remove some points
-    const oldlatRatios = {
+    // II. DEFINE WORLD TILES
+    // 1. remove some points => merge some cells
+    const oldlatitudeRatios = {
         0 :1.0000,
         5 :0.9986,
         10:0.9954,
@@ -480,7 +483,7 @@ function main(DEBUG = false) {
         85:0.5722,
         90:0.5322,
     }
-    const latRatios = {
+    const latitudeRatios = {
         0 :1.00,
         5 :0.99,
         10:0.97,
@@ -508,19 +511,38 @@ function main(DEBUG = false) {
     let flatWorldPoints = []
     for (let p of cp.points) {
         const pointHeighWithoutMargin = p.y - heighOffset
-        // console.log(pointHeighWithoutMargin)
         const pointPositiveLatitude = Math.abs((pointHeighWithoutMargin - halfWorldHeigh) / halfWorldHeigh * worldScale); // (y-(h/2))/(h/2)*90°
-        // console.log(pointPositiveLatitude)
         const latitudeToApply = 5 * Math.floor(pointPositiveLatitude / 5)
-        // console.log(latitudeToApply)
-        const chanceToKeepPoint = latRatios[latitudeToApply > 90 ? 90 : latitudeToApply]
-        // console.log(chanceToKeepPoint)
-
-        // if(Math.random() < (chanceToKeepPoint * chanceToKeepPoint * chanceToKeepPoint * chanceToKeepPoint) / 2)
+        const chanceToKeepPoint = latitudeRatios[latitudeToApply > 90 ? 90 : latitudeToApply]
         if(Math.random() < chanceToKeepPoint)
             flatWorldPoints.push(p)
-
+        if(DEBUG_P2){
+            console.log(pointHeighWithoutMargin)
+            console.log(pointPositiveLatitude)
+            console.log(latitudeToApply)
+            console.log(chanceToKeepPoint)
+        }
     }
+
+    // 1.5. translate whole map
+    if(shouldReplaceMapOnTopLeft){
+        NECorner.Translate(-widthOffset, -heighOffset)
+        NWCorner.Translate(-widthOffset, -heighOffset)
+        SECorner.Translate(-widthOffset, -heighOffset)
+        SWCorner.Translate(-widthOffset, -heighOffset)
+
+        flatWorldPoints.forEach(p => p.Translate(-widthOffset, -heighOffset))
+
+        westBound -= widthOffset
+        eastBound -= widthOffset
+        northBound -= heighOffset
+        southBound -= heighOffset
+    }
+    // Draw map bounds
+    cp.canvas.DrawStroke(NECorner, NWCorner, "grey", 1)
+    cp.canvas.DrawStroke(SWCorner, NWCorner, "grey", 1)
+    cp.canvas.DrawStroke(SWCorner, SECorner, "grey", 1)
+    cp.canvas.DrawStroke(NECorner, SECorner, "grey", 1)
 
     // 2. render filtered points
     cp.points = flatWorldPoints
@@ -533,11 +555,11 @@ function main(DEBUG = false) {
         worldVoronoi.push(poly)
     }
     let fullWorldVoronoi = worldVoronoi
-    worldVoronoi = worldVoronoi
-        .filter(poly => poly.center.x >= widthOffset && poly.center.x <= eastBound && poly.center.y >= heighOffset && poly.center.y <= southBound)
+    worldVoronoi = fullWorldVoronoi
+        .filter(poly => poly.center.x >= westBound && poly.center.x <= eastBound && poly.center.y >= northBound && poly.center.y <= southBound)
     worldVoronoi.forEach(poly => cp.canvas.DrawPolygon(poly.edges, "blue", 2))
 
-    console.log("2nd poly map, time :", Math.abs(time - (new Date())))
+    console.log("II. 2nd poly map, time :", Math.abs(time - (new Date())))
 
     // 3. calculating neighbourhood
     let orphanEdges = []
@@ -568,8 +590,12 @@ function main(DEBUG = false) {
                 orphanEdges.push({polyIndex: index, edge: edge})
         })
     })
-    // orphanEdges.forEach(orphanEdge => cp.canvas.DrawPolygon(worldVoronoi[orphanEdge.polyIndex].edges, "black", 5))
-    // orphanEdges.forEach(orphanEdge => cp.canvas.DrawStroke(orphanEdge.edge[0], orphanEdge.edge[1], "red", 5))
+    if(DEBUG_P2){
+        // black highlight east and west tiles (from orphan edges)
+        orphanEdges.forEach(orphanEdge => cp.canvas.DrawPolygon(worldVoronoi[orphanEdge.polyIndex].edges, "black", 5))
+        // red highlight orphan edges
+        orphanEdges.forEach(orphanEdge => cp.canvas.DrawStroke(orphanEdge.edge[0], orphanEdge.edge[1], "red", 5))
+    }
 
     // 4. orphan edges, resolving east and west sides
     const directionTolerance = 0.05
@@ -634,8 +660,11 @@ function main(DEBUG = false) {
     // eastOrphanEdges.forEach(orphanEdge => neighbourhood[orphanEdge.polyIndex].forEach(neighboorIndex => cp.canvas.DrawPixle(worldVoronoi[neighboorIndex].center, "blue", 5)))
     // DEBUG show neighbourhood
     // neighbourhood.forEach((neighbours, index) => neighbours.forEach(neighbour => cp.canvas.DrawStroke(worldVoronoi[index].center, worldVoronoi[neighbour].center, "black", 2)))
-    console.log("neighbourhood calculated, time :", Math.abs(time - (new Date())))
+    console.log("II. neighbourhood calculated, time :", Math.abs(time - (new Date())))
 
+
+    // III. PLATE COMPONENTS
+    // TODO
 }
 
-main(true)
+main(false, false, false, true)
