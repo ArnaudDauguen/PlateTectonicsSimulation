@@ -1,45 +1,58 @@
 const thrower = (msg) => { throw Error(msg) }
 const arrayEquals = (a, b) => {
-    if (a === b) return true;
-    if (a == null || b == null) return false;
-    if (a.length !== b.length) return false;
+    if (a === b) return true
+    if (a == null || b == null) return false
+    if (a.length !== b.length) return false
 
-    let tmpA = [...a];
-    let tmpB = [...b];
+    let tmpA = [...a]
+    let tmpB = [...b]
 
-    tmpA.sort((a, b) => a.x - b.x + a.y - b.y);
-    tmpB.sort((a, b) => a.x - b.x + a.y - b.y);
+    tmpA.sort((a, b) => a.x - b.x + a.y - b.y)
+    tmpB.sort((a, b) => a.x - b.x + a.y - b.y)
 
     for (let i = 0; i < tmpA.length; i++) {
-        if (tmpA[i] !== tmpB[i]) return false;
+        if (tmpA[i] !== tmpB[i]) return false
     }
 
-    return true;
+    return true
 }
 
 function areTwoEdgesSame(e1, e2) {
     return e1[0].IsSameAs(e2[0]) && e1[1].IsSameAs(e2[1])
 }
 
+function getNeighbours(neighbourhood, tileList, polyId){
+    return tileList.filter((t, i) => neighbourhood[polyId].indexOf(i) > -1)
+}
+
+function isEdgeInBoundTolerance(edge, bound, tolerance){
+    return (edge[0].x >= bound - tolerance && edge[0].x <= bound + tolerance)
+        || (edge[1].x >= bound - tolerance && edge[1].x <= bound + tolerance)
+}
+
+// function CollapseCells(){
+//     console.log("hu")
+// }
+
 class PolygonVoronoi {
     constructor(center, cp) {
-        this.center = center;
-        this.edges = [];
+        this.center = center
+        this.edges = []
 
-        this.cp = cp;
+        this.cp = cp
 
-        this.closed = false;
+        this.closed = false
     }
 
     AddEdge(edge) {
         let reversed = [...edge].reverse()
         for (let e of this.edges) {
             if (areTwoEdgesSame(e, edge) || areTwoEdgesSame(e, reversed)) {
-                return;
+                return
             }
         }
 
-        this.edges.push(edge);
+        this.edges.push(edge)
     }
 
     BuildUp(){
@@ -53,11 +66,11 @@ class PolygonVoronoi {
 
     IsClosed() {
         if (this.edges.length < 3)
-            return false;
+            return false
 
         for (let e1 in this.edges) {
-            let edge0 = false;
-            let edge1 = false;
+            let edge0 = false
+            let edge1 = false
 
             for (let e2 in this.edges) {
                 if (e1 === e2) {
@@ -82,39 +95,39 @@ class PolygonVoronoi {
 
     Close() {
         if (this.edges.length < 3) {
-            this.closed = false;
-            return false;
+            this.closed = false
+            return false
         }
-        let edges = this.edges;
+        let edges = this.edges
 
-        let orderedEdges = edges.splice(0, 1);
+        let orderedEdges = edges.splice(0, 1)
 
-        let sideFound = true;
+        let sideFound = true
         while (edges.length > 0 && sideFound) {
-            sideFound = false;
+            sideFound = false
 
             for (let i = 0; i < edges.length; ++i) {
                 if (edges[i][0].IsSameAs(orderedEdges[orderedEdges.length - 1][1])) {
-                    orderedEdges.push(...edges.splice(i, 1));
-                    sideFound = true;
-                    break;
+                    orderedEdges.push(...edges.splice(i, 1))
+                    sideFound = true
+                    break
                 } else if (edges[i][1].IsSameAs(orderedEdges[orderedEdges.length - 1][1])) {
                     let reversed = edges.splice(i, 1)[0]
-                    orderedEdges.push(reversed.reverse());
-                    sideFound = true;
-                    break;
+                    orderedEdges.push(reversed.reverse())
+                    sideFound = true
+                    break
                 }
             }
         }
 
         //finished with side found
         if (sideFound) {
-            this.edges = orderedEdges;
-            this.closed = this.edges[0][0].IsSameAs(this.edges[this.edges.length - 1][1]);
-            return this.closed;
+            this.edges = orderedEdges
+            this.closed = this.edges[0][0].IsSameAs(this.edges[this.edges.length - 1][1])
+            return this.closed
         }
 
-        return false;
+        return false
     }
 
     Lloyd(){
@@ -142,166 +155,166 @@ class PolygonVoronoi {
 
 class Canvas {
     constructor(id = 'canvas') {
-        this.element = document.getElementById(id);
-        this.width = this.element.width;
-        this.height = this.element.height;
-        this.ctx = this.element.getContext("2d");
-        this.data = this.ctx.getImageData(0, 0, this.width, this.height);
+        this.element = document.getElementById(id)
+        this.width = this.element.width
+        this.height = this.element.height
+        this.ctx = this.element.getContext("2d")
+        this.data = this.ctx.getImageData(0, 0, this.width, this.height)
     }
 
     DrawPixle(p, color = 'black', thickness = 5) {
-        this.ctx.save();
-        this.ctx.fillStyle = color;
-        this.ctx.fillRect(p.x - thickness / 2, p.y - thickness / 2, thickness, thickness);
+        this.ctx.save()
+        this.ctx.fillStyle = color
+        this.ctx.fillRect(p.x - thickness / 2, p.y - thickness / 2, thickness, thickness)
         this.ctx.restore()
     }
 
     DrawText(text, p, color) {
-        this.ctx.save();
-        this.ctx.font = '20px serif';
-        this.ctx.fillStyle = color;
-        this.ctx.fillText(text, p.x, p.y);
-        this.ctx.restore();
+        this.ctx.save()
+        this.ctx.font = '20px serif'
+        this.ctx.fillStyle = color
+        this.ctx.fillText(text, p.x, p.y)
+        this.ctx.restore()
     }
 
     DrawStroke(p1, p2, color = 'black', lineWidth = 2) {
-        this.ctx.save();
-        this.ctx.beginPath();
-        this.ctx.strokeStyle = color;
-        this.ctx.lineWidth = lineWidth;
-        this.ctx.moveTo(p1.x, p1.y);
-        this.ctx.lineTo(p2.x, p2.y);
-        this.ctx.stroke();
-        this.ctx.restore();
+        this.ctx.save()
+        this.ctx.beginPath()
+        this.ctx.strokeStyle = color
+        this.ctx.lineWidth = lineWidth
+        this.ctx.moveTo(p1.x, p1.y)
+        this.ctx.lineTo(p2.x, p2.y)
+        this.ctx.stroke()
+        this.ctx.restore()
     }
 
-    DrawPolygon(polygon, color = null) {
-        for (let i = 0; i < polygon.length; i++) {
-            this.DrawStroke(polygon[i][0], polygon[i][1], color || ["red", "green", "blue"][i % 3]);
+    DrawPolygon(edges, color = null, thickness = 2) {
+        for (let i = 0; i < edges.length; i++) {
+            this.DrawStroke(edges[i][0], edges[i][1], color || ["red", "green", "blue"][i % 3], thickness)
         }
     }
 
     DrawCircle(center, radius, color = "green") {
-        this.ctx.save();
-        this.ctx.strokeStyle = color;
-        this.ctx.beginPath();
-        this.ctx.arc(center.x, center.y, radius, 0, 2 * Math.PI);
-        this.ctx.stroke();
-        this.ctx.restore();
+        this.ctx.save()
+        this.ctx.strokeStyle = color
+        this.ctx.beginPath()
+        this.ctx.arc(center.x, center.y, radius, 0, 2 * Math.PI)
+        this.ctx.stroke()
+        this.ctx.restore()
     }
 
     Clear() {
-        this.ctx.clearRect(0, 0, this.width, this.height);
+        this.ctx.clearRect(0, 0, this.width, this.height)
     }
 }
 
 class Point {
     constructor(x, y, z = 0) {
-        this.x = x || 0;
-        this.y = y || 0;
-        this.z = z || 0;
+        this.x = x || 0
+        this.y = y || 0
+        this.z = z || 0
     
-        this.triangles = [];
+        this.triangles = []
     }
 
     Distance(point) {
-        return Math.sqrt((point.x - this.x) ** 2 + (point.y - this.y) ** 2);
+        return Math.sqrt((point.x - this.x) ** 2 + (point.y - this.y) ** 2)
     }
 
     IsSameAs(point, epsilon = 0.0001) {
         return Math.abs(this.x - point.x) < epsilon
             && Math.abs(this.y - point.y) < epsilon
-            && Math.abs(this.z - point.z) < epsilon;
+            && Math.abs(this.z - point.z) < epsilon
     }
 }
 
 class CloudPoints {
     constructor(density = 10, minX = 0, maxX = 10, minY = 0, maxY = 10) {
-        this.points = [];
-        this.triangles = [];
-        this.canvas = new Canvas();
+        this.points = []
+        this.triangles = []
+        this.canvas = new Canvas()
 
         for (let i = 0; i < density; i++) {
-            let x = Math.random() * maxX + minX;
-            let y = Math.random() * maxY + minY;
+            let x = Math.random() * maxX + minX
+            let y = Math.random() * maxY + minY
 
-            let point = new Point(x, y);
-            this.points.push(point);
+            let point = new Point(x, y)
+            this.points.push(point)
         }
     }
 
     DelaunayBowyerWatson(DEBUG = false, color = 'black') {
-        let superTriangle = this.SuperTriangle();
-        let triangulation = [superTriangle];
-        let toDelete = [];
-        let container = [];
-        this.triangles = [];
+        let superTriangle = this.SuperTriangle()
+        let triangulation = [superTriangle]
+        let toDelete = []
+        let container = []
+        this.triangles = []
 
         for (let point of this.points) {
-            toDelete = triangulation.filter(triangle => triangle.Circumcircle().Contains(point));
-            container = [];
+            toDelete = triangulation.filter(triangle => triangle.Circumcircle().Contains(point))
+            container = []
 
             for (let triangle of toDelete) {
                 for (let edge of triangle.Edges()) {
-                    if (triangle.FindAdjacentToEdge(toDelete, edge) === null) container.push(edge);
+                    if (triangle.FindAdjacentToEdge(toDelete, edge) === null) container.push(edge)
                 }
             }
 
-            triangulation = triangulation.filter(t => !toDelete.includes(t));
+            triangulation = triangulation.filter(t => !toDelete.includes(t))
 
             for (let edge of container) {
-                triangulation.push(new Triangle(point, edge[0], edge[1]));
+                triangulation.push(new Triangle(point, edge[0], edge[1]))
             }
         }
 
-        triangulation = triangulation.filter(t => !t.Vertices().some(v => superTriangle.Vertices().includes(v)));
+        triangulation = triangulation.filter(t => !t.Vertices().some(v => superTriangle.Vertices().includes(v)))
 
         for (let triangle of triangulation) {
             for (let p of triangle.Vertices()) {
-                p.triangles.push(triangle);
+                p.triangles.push(triangle)
             }
         }
 
         if (DEBUG) {
             for (let t of triangulation) {
-                this.canvas.DrawPolygon(t.Edges(), color);
+                this.canvas.DrawPolygon(t.Edges(), color)
                 //this.canvas.DrawCircle(t.Circumcircle().center, t.Circumcircle().radius, "green")
             }
             for (let p in this.points) {
-                this.canvas.DrawPixle(this.points[p], "red");
+                this.canvas.DrawPixle(this.points[p], "red")
                 //console.log(p, this.points[p])
-                this.canvas.DrawText(p, this.points[p], 'blue');
+                this.canvas.DrawText(p, this.points[p], 'blue')
             }
         }
 
-        return triangulation;
+        return triangulation
     }
 
     SuperTriangle() {
-        let pMaxX = this.points.sort((a, b) => { return b.x - a.x })[0];
-        let pMinX = this.points.sort((a, b) => { return a.x - b.x })[0];
-        let pMaxY = this.points.sort((a, b) => { return b.y - a.y })[0];
-        let pMinY = this.points.sort((a, b) => { return a.y - b.y })[0];
+        let pMaxX = this.points.sort((a, b) => { return b.x - a.x })[0]
+        let pMinX = this.points.sort((a, b) => { return a.x - b.x })[0]
+        let pMaxY = this.points.sort((a, b) => { return b.y - a.y })[0]
+        let pMinY = this.points.sort((a, b) => { return a.y - b.y })[0]
 
-        let a = new Point(pMinX.x - 50, pMinY.y - 50);
-        let b = new Point((pMaxX.x - pMinX.x + 25) * 2, pMinY.y);
-        let c = new Point(pMinX.x, (pMaxY.y - pMinY.y + 25) * 2);
+        let a = new Point(pMinX.x - 50, pMinY.y - 50)
+        let b = new Point((pMaxX.x - pMinX.x + 25) * 2, pMinY.y)
+        let c = new Point(pMinX.x, (pMaxY.y - pMinY.y + 25) * 2)
 
-        return new Triangle(a, b, c);
+        return new Triangle(a, b, c)
     }
 }
 
 class Triangle {
     constructor(p1, p2, p3, done = false) {
-        this.p1 = (p1 instanceof Point) ? p1 : thrower('P1 must be a point');
-        this.p2 = (p2 instanceof Point) ? p2 : thrower("P2 must be a point");
-        this.p3 = (p3 instanceof Point) ? p3 : thrower("P3 must be a point");
+        this.p1 = (p1 instanceof Point) ? p1 : thrower('P1 must be a point')
+        this.p2 = (p2 instanceof Point) ? p2 : thrower("P2 must be a point")
+        this.p3 = (p3 instanceof Point) ? p3 : thrower("P3 must be a point")
 
-        this.isCalculated = false;
+        this.isCalculated = false
     }
 
     CircumcircleCenter() {
-        let ad = this.p1.x ** 2 + this.p1.y ** 2;
+        let ad = this.p1.x ** 2 + this.p1.y ** 2
         let bd = this.p2.x ** 2 + this.p2.y ** 2
         let cd = this.p3.x ** 2 + this.p3.y ** 2
         let d = 2 * (this.p1.x * (this.p2.y - this.p3.y) + this.p2.x * (this.p3.y - this.p1.y) + this.p3.x * (this.p1.y - this.p2.y))
@@ -310,13 +323,13 @@ class Triangle {
             1 / d * (ad * (this.p3.x - this.p2.x) + bd * (this.p1.x - this.p3.x) + cd * (this.p2.x - this.p1.x))
         )
         
-        return mean;
+        return mean
     }
 
     Circumcircle() {
-        const mean = this.CircumcircleCenter();
+        const mean = this.CircumcircleCenter()
 
-        return new Circle(mean, this.p1.Distance(mean));
+        return new Circle(mean, this.p1.Distance(mean))
     }
 
     Edges() {
@@ -324,101 +337,305 @@ class Triangle {
             [this.p1, this.p2],
             [this.p2, this.p3],
             [this.p3, this.p1],
-        ];
+        ]
     }
 
     Vertices() {
-        return [this.p1, this.p2, this.p3];
+        return [this.p1, this.p2, this.p3]
     }
 
     AdjacentEdges(triangle) {
-        if (!(triangle instanceof Triangle)) thrower("triangle must be a Triangle");
+        if (!(triangle instanceof Triangle)) thrower("triangle must be a Triangle")
 
         return this.Edges().filter((e) => {
             for (let edge of triangle.Edges()) {
-                if (arrayEquals(edge, e)) return true;
+                if (arrayEquals(edge, e)) return true
             }
 
-            return false;
-        });
+            return false
+        })
     }
 
     IsAdjacent(triangle) {
-        const adjacentEdges = this.AdjacentEdges(triangle).length;
-        return  0 < adjacentEdges && adjacentEdges < 2;
+        const adjacentEdges = this.AdjacentEdges(triangle).length
+        return  0 < adjacentEdges && adjacentEdges < 2
     }
 
     FindAdjacentToEdge(triangles, edge) {
         for (let triangle of triangles) {
-            let adjacentEdges = this.AdjacentEdges(triangle);
+            let adjacentEdges = this.AdjacentEdges(triangle)
 
-            if (adjacentEdges.length !== 1) continue;
-            if (arrayEquals(adjacentEdges[0], edge)) return triangle;
+            if (adjacentEdges.length !== 1) continue
+            if (arrayEquals(adjacentEdges[0], edge)) return triangle
         }
 
-        return null;
+        return null
     }
 }
 
 class Circle {
     constructor(center, radius) {
-        this.center = (center instanceof Point) ? center : thrower('Center must be a point');
-        this.radius = radius || 1;
+        this.center = (center instanceof Point) ? center : thrower('Center must be a point')
+        this.radius = radius || 1
     }
 
     Contains(point) {
-        if (!(point instanceof Point)) thrower('Point must be a point');
+        if (!(point instanceof Point)) thrower('Point must be a point')
 
-        return ((point.x - this.center.x) ** 2 + (point.y - this.center.y) ** 2 < this.radius ** 2);
+        return ((point.x - this.center.x) ** 2 + (point.y - this.center.y) ** 2 < this.radius ** 2)
     }
 }
 
-function main() {
-    const SEED = "aaaaaaa";
-    const W_WIDTH = 1280;
-    const W_HEIGH = 720;
-    //Math.seedrandom(SEED);
+function main(DEBUG = false) {
+    const POINT_QTY = 7000
+    const W_WIDTH = 1280
+    const W_HEIGH = 720
+    const IT_MAX = 3
 
-    let cp = new CloudPoints(5000
-        , - W_WIDTH *.10, W_WIDTH * 1.1, - W_HEIGH * .10, W_HEIGH * 1.1
-        );
-    cp.canvas.ctx.scale(3, 3);
+    // const SEED = "aaaaaaa"
+    // Math.seedrandom(SEED)
+
+    const widthOffset = .20 * W_WIDTH
+    const heighOffset = .20 * W_HEIGH
+    const westBound = widthOffset
+    const eastBound = W_WIDTH + widthOffset
+    const northBound = heighOffset
+    const southBound = W_HEIGH + heighOffset
+
+    const mapTopLeftPoint = new Point(westBound, northBound)
+    const mapBottomRightPoint = new Point(eastBound, southBound)
+
+    let cp = new CloudPoints(POINT_QTY,
+        0, eastBound + 2 * widthOffset,
+        0, southBound + 2 * heighOffset
+    )
+    cp.canvas.ctx.scale(1, 1)
     
-    time = new Date();
+    time = new Date()
 
-    const IT_MAX = 3; 
-
-    let c = ['red', 'blue', 'green', 'green', 'green', 'green'];
+    let c = ['red', 'blue', 'green', 'green', 'green', 'green']
     //`hsl(${iteration / IT_MAX * 360}, 100%, 50%)`
     
 
+    // I. MAKING POLYGONS
     for (let iteration = 0; iteration < IT_MAX; iteration++) {
-        let triangulation = cp.DelaunayBowyerWatson(false, 'black');
-        let voronoi = [];
+        const isLastIT = iteration === IT_MAX - 1
+
+        const triangulation = cp.DelaunayBowyerWatson(false, 'black')
+
+        let voronoi = []
 
         for (let p of cp.points) {
-            let poly = new PolygonVoronoi(p, cp);
-            poly.BuildUp();
-            voronoi.push(poly);
+            let poly = new PolygonVoronoi(p, cp)
+            poly.BuildUp()
+            voronoi.push(poly)
         }
 
-        if (iteration === -1 || iteration === IT_MAX - 1)
-            voronoi.forEach(poly => cp.canvas.DrawPolygon(poly.edges, c[iteration]))
+        if (isLastIT || iteration === -1){
+            // voronoi
+            //     .filter(poly => poly.center.x > widthOffset && poly.center.x < eastBound && poly.center.y > heighOffset && poly.center.y < southBound)
+            //     .forEach(poly => cp.canvas.DrawPolygon(poly.edges, c[iteration], 1))
+            if(DEBUG){
+                cp.canvas.DrawPixle(mapTopLeftPoint, "blue", 20)
+                cp.canvas.DrawPixle(mapBottomRightPoint, "blue", 20)
+            }
+        }
         
         let points = new Array()
         for (let poly of voronoi) {
             if (poly.Close()) {
-                poly.Lloyd();
+                poly.Lloyd()
 
             }
 
-            points.push(new Point(poly.center.x, poly.center.y));
+            points.push(new Point(poly.center.x, poly.center.y))
         }
         
-        cp.points = points;
+        cp.points = points
     }
 
-    console.log(Math.abs(time - (new Date())));
+    console.log("1st poly map, time :", Math.abs(time - (new Date())))
+
+
+    // II. MERGING CELLS
+    // 1. remove some points
+    const oldlatRatios = {
+        0 :1.0000,
+        5 :0.9986,
+        10:0.9954,
+        15:0.9900,
+        20:0.9822,
+        25:0.9730,
+        30:0.9600,
+        35:0.9427,
+        40:0.9216,
+        45:0.8962,
+        50:0.8679,
+        55:0.8350,
+        60:0.7986,
+        65:0.7597,
+        70:0.7186,
+        75:0.6732,
+        80:0.6213,
+        85:0.5722,
+        90:0.5322,
+    }
+    const latRatios = {
+        0 :1.00,
+        5 :0.99,
+        10:0.97,
+        15:0.95,
+        20:0.90,
+        25:0.85,
+        30:0.79,
+        35:0.72,
+        40:0.66,
+        45:0.56,
+        50:0.45,
+        55:0.34,
+        60:0.23,
+        65:0.12,
+        70:0.10,
+        75:0.08,
+        80:0.02,
+        85:0.02,
+        90:0.02,
+    }
+
+    const halfWorldHeigh = W_HEIGH / 2
+    const worldScale = 90; // half globe = 90°
+
+    let flatWorldPoints = []
+    for (let p of cp.points) {
+        const pointHeighWithoutMargin = p.y - heighOffset
+        // console.log(pointHeighWithoutMargin)
+        const pointPositiveLatitude = Math.abs((pointHeighWithoutMargin - halfWorldHeigh) / halfWorldHeigh * worldScale); // (y-(h/2))/(h/2)*90°
+        // console.log(pointPositiveLatitude)
+        const latitudeToApply = 5 * Math.floor(pointPositiveLatitude / 5)
+        // console.log(latitudeToApply)
+        const chanceToKeepPoint = latRatios[latitudeToApply > 90 ? 90 : latitudeToApply]
+        // console.log(chanceToKeepPoint)
+
+        // if(Math.random() < (chanceToKeepPoint * chanceToKeepPoint * chanceToKeepPoint * chanceToKeepPoint) / 2)
+        if(Math.random() < chanceToKeepPoint)
+            flatWorldPoints.push(p)
+
+    }
+
+    // 2. render filtered points
+    cp.points = flatWorldPoints
+    const triangulation = cp.DelaunayBowyerWatson(false, 'black')
+    let worldVoronoi = []
+    let neighbourhood = []
+    for (let p of cp.points) {
+        let poly = new PolygonVoronoi(p, cp)
+        poly.BuildUp()
+        worldVoronoi.push(poly)
+    }
+    let fullWorldVoronoi = worldVoronoi
+    worldVoronoi = worldVoronoi
+        .filter(poly => poly.center.x >= widthOffset && poly.center.x <= eastBound && poly.center.y >= heighOffset && poly.center.y <= southBound)
+    worldVoronoi.forEach(poly => cp.canvas.DrawPolygon(poly.edges, "blue", 2))
+
+    console.log("2nd poly map, time :", Math.abs(time - (new Date())))
+
+    // 3. calculating neighbourhood
+    let orphanEdges = []
+    worldVoronoi.forEach((poly, index) => {
+        neighbourhood[index] = new Set()
+        poly.edges.forEach((edge) => {
+            let edgeSisterFound = false
+            for(let i = 0; i < worldVoronoi.length; i++) {
+                // exclude self
+                if(i === index)
+                    continue
+
+                const rPoly = worldVoronoi[i]
+
+                for(let j = 0; j < rPoly.edges.length; j++) {
+                    if(areTwoEdgesSame(edge, rPoly.edges[j])){
+                        edgeSisterFound = true
+                        neighbourhood[index].add(i)
+                        break
+                    }
+                }
+
+                // this edge already has found his sister, no need for more iteration
+                if(edgeSisterFound)
+                    break
+            }
+            if(!edgeSisterFound)
+                orphanEdges.push({polyIndex: index, edge: edge})
+        })
+    })
+    // orphanEdges.forEach(orphanEdge => cp.canvas.DrawPolygon(worldVoronoi[orphanEdge.polyIndex].edges, "black", 5))
+    // orphanEdges.forEach(orphanEdge => cp.canvas.DrawStroke(orphanEdge.edge[0], orphanEdge.edge[1], "red", 5))
+
+    // 4. orphan edges, resolving east and west sides
+    const directionTolerance = 0.05
+    const tolerance = W_WIDTH * directionTolerance
+    const westOrphanEdges = orphanEdges.filter(orphanEdge =>
+        (orphanEdge.edge[0].x < westBound
+            || orphanEdge.edge[1].x < westBound
+        ) || isEdgeInBoundTolerance(orphanEdge.edge, westBound, tolerance))
+    const eastOrphanEdges = orphanEdges.filter(orphanEdge =>
+        (orphanEdge.edge[0].x > eastBound
+            || orphanEdge.edge[1].x > eastBound
+        ) || isEdgeInBoundTolerance(orphanEdge.edge, eastBound, tolerance))
+    // DEBUG display frontier bounds
+    // westOrphanEdges.forEach(orphanEdge => cp.canvas.DrawStroke(orphanEdge.edge[0], orphanEdge.edge[1], "red", 5))
+    // eastOrphanEdges.forEach(orphanEdge => cp.canvas.DrawStroke(orphanEdge.edge[0], orphanEdge.edge[1], "red", 5))
+
+    // west side
+    westOrphanEdges.forEach((orphanEdge) => {
+        const y1 = orphanEdge.edge[0].y
+        const y2 = orphanEdge.edge[1].y
+        for(let i = 0; i < eastOrphanEdges.length; i++) {
+            const y3 = eastOrphanEdges[i].edge[0].y
+            const y4 = eastOrphanEdges[i].edge[1].y
+            if((y1 < y3 && y3 < y2)
+                || (y1 < y4 && y4 < y2)
+                || (y3 < y1 && y1 < y4)
+                || (y3 < y2 && y2 < y4)
+
+                || (y2 < y3 && y3 < y1)
+                || (y2 < y4 && y4 < y1)
+                || (y4 < y1 && y1 < y3)
+                || (y4 < y2 && y2 < y3)
+            ){
+                neighbourhood[orphanEdge.polyIndex].add(eastOrphanEdges[i].polyIndex)
+                // cp.canvas.DrawPolygon(worldVoronoi[eastOrphanEdges[i].polyIndex].edges, "black", 3)
+                break
+            }
+        }
+    })
+    // east side
+    eastOrphanEdges.forEach((orphanEdge) => {
+        const y1 = orphanEdge.edge[0].y
+        const y2 = orphanEdge.edge[1].y
+        for(let i = 0; i < westOrphanEdges.length; i++) {
+            const y3 = westOrphanEdges[i].edge[0].y
+            const y4 = westOrphanEdges[i].edge[1].y
+            if((y1 < y3 && y3 < y2)
+                || (y1 < y4 && y4 < y2)
+                || (y3 < y1 && y1 < y4)
+                || (y3 < y2 && y1 < y4)
+            ){
+                neighbourhood[orphanEdge.polyIndex].add(westOrphanEdges[i].polyIndex)
+                // cp.canvas.DrawPolygon(worldVoronoi[westOrphanEdges[i].polyIndex].edges, "black", 3)
+                break
+            }
+        }
+    })
+    
+    neighbourhood = neighbourhood.map(n => Array.from(n))
+    // DEBUG neighbouring frontier tiles
+    // westOrphanEdges.forEach(orphanEdge => neighbourhood[orphanEdge.polyIndex].forEach(neighboorIndex => cp.canvas.DrawPixle(worldVoronoi[neighboorIndex].center, "green", 5)))
+    // eastOrphanEdges.forEach(orphanEdge => neighbourhood[orphanEdge.polyIndex].forEach(neighboorIndex => cp.canvas.DrawPixle(worldVoronoi[neighboorIndex].center, "blue", 5)))
+    // DEBUG show neighbourhood
+    // neighbourhood.forEach((neighbours, index) => neighbours.forEach(neighbour => cp.canvas.DrawStroke(worldVoronoi[index].center, worldVoronoi[neighbour].center, "black", 2)))
+    console.log("neighbourhood calculated, time :", Math.abs(time - (new Date())))
+
 }
 
-main();
+main(true)
