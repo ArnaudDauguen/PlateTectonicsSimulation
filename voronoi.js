@@ -34,6 +34,21 @@ function isEdgeInBoundTolerance(edge, bound, tolerance){
 //     console.log("hu")
 // }
 
+function shuffle(array) {
+    let copy = [...array]
+    let m = copy.length, t, i;
+    // While there remain elements to shuffle...
+    while (m) {
+        // Pick a remaining element...
+        i = Math.floor(Math.random() * m--)
+        // And swap it with the current element
+        t = copy[m]
+        copy[m] = copy[i]
+        copy[i] = t
+    }
+    return array
+}
+
 class PolygonVoronoi {
     constructor(center, cp) {
         this.center = center
@@ -42,6 +57,9 @@ class PolygonVoronoi {
         this.cp = cp
 
         this.closed = false
+
+        this.plateComponentId = -1
+        this.plateId = -1
     }
 
     AddEdge(edge) {
@@ -396,12 +414,7 @@ class Circle {
     }
 }
 
-function main(shouldReplaceMapOnTopLeft = false, DEBUG_P1 = false, DEBUG_P2 = false, DEBUG_P3 = false) {
-    const POINT_QTY = 7000
-    const W_WIDTH = 1280
-    const W_HEIGH = 720
-    const IT_MAX = 3
-
+function main(W_WIDTH = 1280, W_HEIGH = 720, POINT_QTY = 7000, IT_MAX = 3, shouldReplaceMapOnTopLeft = false, DEBUG_P1 = false, DEBUG_P2 = false, DEBUG_P3 = false) {
     // const SEED = "aaaaaaa"
     // Math.seedrandom(SEED)
 
@@ -655,16 +668,138 @@ function main(shouldReplaceMapOnTopLeft = false, DEBUG_P1 = false, DEBUG_P2 = fa
     })
     
     neighbourhood = neighbourhood.map(n => Array.from(n))
-    // DEBUG neighbouring frontier tiles
-    // westOrphanEdges.forEach(orphanEdge => neighbourhood[orphanEdge.polyIndex].forEach(neighboorIndex => cp.canvas.DrawPixle(worldVoronoi[neighboorIndex].center, "green", 5)))
-    // eastOrphanEdges.forEach(orphanEdge => neighbourhood[orphanEdge.polyIndex].forEach(neighboorIndex => cp.canvas.DrawPixle(worldVoronoi[neighboorIndex].center, "blue", 5)))
     // DEBUG show neighbourhood
     // neighbourhood.forEach((neighbours, index) => neighbours.forEach(neighbour => cp.canvas.DrawStroke(worldVoronoi[index].center, worldVoronoi[neighbour].center, "black", 2)))
     console.log("II. neighbourhood calculated, time :", Math.abs(time - (new Date())))
 
 
-    // III. PLATE COMPONENTS
-    // TODO
+    // III. PLATES
+    const tileToPlateRatio = 5
+    const neighbouringFactorToSwap = 0.4
+    const harmonizationQty = 2
+    const wishedPlateQty = 17
+
+    let plateComponents = []
+    const colours = ["red", "green", "blue", "yellow", "cyan", "purple", "orange", "brown", "grey", "olive", "PaleVioletRed", "SkyBlue", "Violet", "Teal", "YellowGreen", "black", "Beige"]
+    // 1. Plate components
+    for(let i = 0; i < worldVoronoi.length / tileToPlateRatio; i++){
+        plateComponents.push([[]])
+        const indexToAdd = Math.floor(Math.random() * worldVoronoi.length)
+        plateComponents[i][0].push(indexToAdd)
+        worldVoronoi[indexToAdd].plateComponentId = i
+    }
+    let COUNTDOWN = 10
+    // for each plateComponent, ring by ring try to add a neighbour
+    while(worldVoronoi.filter(tile => tile.plateComponentId == -1).length > 0 && COUNTDOWN > 0){
+        COUNTDOWN --
+        plateComponents.forEach((rings, index) => {
+            let newTileAdded = false
+            for(let h = 0; h < rings.length; h++){
+                const ring = rings[h]
+                // stop this plateComponent's expansion if outer ring is too small
+                if(h > 1 && ring.length < 2)
+                    break
+                for(let i = 0; i < ring.length; i++){
+                    const polyIndex = ring[i]
+                    const neighbours = neighbourhood[polyIndex]
+                    // add all non-atributed neighbours to the ring
+                    neighbours.forEach((neighbour) => {
+                        if(worldVoronoi[neighbour].plateComponentId == -1){
+                            worldVoronoi[neighbour].plateComponentId = index
+                            if(rings.length - 1 == h)
+                                rings.push([])
+                            rings[h+1].push(neighbour)
+                            newTileAdded = true
+                        }
+                    })
+                    if(newTileAdded) break
+                }
+                if(newTileAdded) break
+            }
+        })
+    }
+
+    plateComponents = plateComponents.map(p => p.flat(Infinity))
+
+    // Harmonization
+    for(let harmonizationCount = 0; harmonizationCount < harmonizationQty; harmonizationCount++){
+        worldVoronoi.forEach((tile, index) => {
+            const neighbourPlateComponentsIds = neighbourhood[index].map(neighbourIndex => worldVoronoi[neighbourIndex].plateComponentId)
+            for(let i = 0; i < neighbourPlateComponentsIds.length; i++){
+                const plateComponentId = neighbourPlateComponentsIds[i]
+                if(tile.plateComponentId == plateComponentId)
+                    continue
+                const neighbourCount = neighbourPlateComponentsIds.reduce((acc, cur) => {return acc += (cur == plateComponentId)}, 0)
+                if(neighbourCount > neighbourPlateComponentsIds.length * neighbouringFactorToSwap){
+                    const indexToRemove = plateComponents[tile.plateComponentId].indexOf(index)
+                    if(indexToRemove === -1)
+                        continue
+                    plateComponents[tile.plateComponentId].splice(indexToRemove, 1)
+                    plateComponents[plateComponentId].push(index)
+                    tile.plateComponentId = plateComponentId
+                    // cp.canvas.DrawPixle(tile.center, colours[plateComponentId % colours.length], 20 - harmonizationCount * 4)
+                    break
+                }
+            }
+        })
+    }
+
+    // display plate components
+    if(DEBUG_P3){
+        console.log("plateComponents", plateComponents)
+        // worldVoronoi.forEach(tile => cp.canvas.DrawPixle(tile.center, colours[tile.plateComponentId % colours.length], tile.plateComponentId === -1 ? 0 : 20))
+    }
+    
+    // 2. Generate Plates
+    let plates = plateComponents.length < wishedPlateQty ? [...plateComponents] : []
+    if(plates.length === 0){
+        while(plates.length < wishedPlateQty){
+            plates.push([...plateComponents[Math.floor(Math.random() * plateComponents.length)]])
+            plates[plates.length -1].forEach(tileIndex => worldVoronoi[tileIndex].plateId = plates.length -1)
+        }
+    }
+
+    // 3. fill plates
+    COUNTDOWN = 50
+    while(worldVoronoi.filter(tile => tile.plateId === -1).length > 0 && COUNTDOWN > 0){
+        COUNTDOWN --
+        plates.forEach((plate, plateIndex) => {
+            let newTilesAdded = false
+            const shuffledPlate = shuffle(plate)
+            for(let i = 0; i < shuffledPlate.length; i++){
+                const plateTileIndex = shuffledPlate[i]
+
+                 for(let j = 0; j < neighbourhood[plateTileIndex].length; j++){
+                    const neighbourIndex = neighbourhood[plateTileIndex][j]
+
+                    if(worldVoronoi[neighbourIndex].plateId === -1){
+                        newTilesAdded = true
+
+                        const tilesToAdd = plateComponents[worldVoronoi[neighbourIndex].plateComponentId]
+                        plate.push(...tilesToAdd)
+                        tilesToAdd.forEach(tileIndex => worldVoronoi[tileIndex].plateId = plateIndex)
+                    }
+
+                    if(newTilesAdded) break
+                }
+                if(newTilesAdded) break
+            }
+        })
+    }
+    
+    if(DEBUG_P3)
+        console.log("countdown", COUNTDOWN)
+
+    if(DEBUG_P3)
+        console.log("plates", plates)
+    // display plates
+    if(DEBUG_P3)
+        worldVoronoi.forEach(tile => cp.canvas.DrawPixle(tile.center, colours[tile.plateId % colours.length], tile.plateId === -1 ? 0 : 20))
+    // worldVoronoi.forEach(tile => cp.canvas.DrawPixle(tile.center, colours[tile.plateComponentId % colours.length], tile.plateComponentId === -1 ? 0 : 10))
+    
+    
+    console.log("III. tectonic plates, time :", Math.abs(time - (new Date())))
+
 }
 
-main(false, false, false, true)
+main(1280, 720, 14000, 3, false, false, false, true)
