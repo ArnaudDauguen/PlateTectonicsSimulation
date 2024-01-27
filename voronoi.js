@@ -16,7 +16,7 @@ const arrayEquals = (a, b) => {
 
     return true
 }
-
+async function sleep(ms) {return new Promise(resolve => setTimeout(resolve, ms))}
 function areTwoEdgesSame(e1, e2) {
     return e1[0].IsSameAs(e2[0]) && e1[1].IsSameAs(e2[1])
 }
@@ -49,6 +49,113 @@ function shuffle(array) {
     return array
 }
 
+const TERRAINTYPES = {
+    undefined: {
+        colour: "black",
+    },
+    water: {
+        colour: "DodgerBlue",
+    },
+    deepWater: {
+        colour: "blue",
+    },
+    earth: {
+        colour: "ForestGreen",
+    },
+    mountain: {
+        colour: "Sienna",
+    },
+}
+
+const COLOURS = ["red", "green", "blue", "yellow", "cyan", "purple", "orange", "brown", "grey", "olive", "PaleVioletRed", "SkyBlue", "Violet", "Teal", "YellowGreen", "black", "Beige"]
+
+const DIRECTIONS = {
+    N : 0,
+    NE: 1,
+    E : 2,
+    SE: 3,
+    S : 4,
+    SW: 5,
+    W : 6,
+    NW: 7,
+}
+
+function getRandomDirection(){
+    const options = Object.keys(DIRECTIONS)
+    return DIRECTIONS[options[Math.floor(Math.random() * options.length)]]
+}
+
+function rotateDirection(input, change){
+    input = input + change
+    if(input < 0)
+        input += 8
+    if(input > 7)
+        input -= 8
+    return DIRECTIONS[Object.keys(DIRECTIONS).find(key => DIRECTIONS[key] === input)]
+}
+
+function areDirectionsDivergent(a, b, tolerance = 2){
+    // return (Math.max(a, b) - Math.min(a, b)) > tolerance
+    // return Math.abs(a - b) > tolerance
+    return a > b
+        ? (a - b) > tolerance
+        : (b - a) > tolerance
+}
+
+function getDirectionBetweenPoints(start, end){
+    // /!\ divide by 0 return Infinity (still valid value)
+    const yRatio = end.y - start.y / end.x - start.x
+
+    if(end.x > start.x){ // east
+        if(end.y > start.y){ // south
+            if(yRatio < 0.4)
+                return DIRECTIONS.E
+            if(yRatio > 2.5)
+                return DIRECTIONS.S
+            return DIRECTIONS.SE
+        }else{ // north
+            if(yRatio > -0.4)
+                return DIRECTIONS.E
+            if(yRatio < -2.5)
+                return DIRECTIONS.N
+            return DIRECTIONS.NE
+        }
+    }else{ // west
+        if(end.y > start.y){ // south
+            if(yRatio > -0.4)
+                return DIRECTIONS.W
+            if(yRatio < -2.5)
+                return DIRECTIONS.S
+            return DIRECTIONS.SW
+        }else{ // north
+            if(yRatio < 0.4)
+                return DIRECTIONS.W
+            if(yRatio > 2.5)
+                return DIRECTIONS.N
+            return DIRECTIONS.NW
+        }
+    }
+}
+
+function getDirectionBetweenTiles(start, end){
+    return getDirectionBetweenPoints(start.center, end.center)
+}
+
+function displayPlates(cp, tiles, size = 4){
+    tiles.forEach(tile => cp.canvas.DrawPixle(tile.center, COLOURS[tile.plateId % COLOURS.length], tile.plateId === -1 ? 0 : size))
+}
+
+function saveWorldAsImg(){
+    const canvas = document.getElementById('canvas')
+    let img = new Image()
+    img.src = canvas.toDataURL()
+    document.body.append(img)
+}
+
+function displayTerrain(cp, tiles, size = 20){
+    tiles.forEach(tile => cp.canvas.DrawPixle(tile.center, tile.terrainType.colour || "black", size))
+}
+
 class PolygonVoronoi {
     constructor(center, cp) {
         this.center = center
@@ -60,6 +167,11 @@ class PolygonVoronoi {
 
         this.plateComponentId = -1
         this.plateId = -1
+
+        this.terrainType = TERRAINTYPES.undefined
+        this.curHeight = -1
+        this.newHeight = -1
+
     }
 
     AddEdge(edge) {
@@ -414,7 +526,14 @@ class Circle {
     }
 }
 
-function main(W_WIDTH = 1280, W_HEIGH = 720, POINT_QTY = 7000, IT_MAX = 3, shouldReplaceMapOnTopLeft = false, DEBUG_P1 = false, DEBUG_P2 = false, DEBUG_P3 = false) {
+async function main(W_WIDTH = 1280, W_HEIGH = 720,
+        POINT_QTY = 7000, IT_MAX = 3,
+        CONF_shouldReplaceMapOnTopLeft = false,
+        DEBUG_P1 = false,
+        DEBUG_P2 = false,
+        CONF_wishedPlateQty, CONF_harmonizationQty, DEBUG_P3 = false,
+        CONF_seaToLandRatio = 0.85, CONF_worldAge = 10,
+    ) {
     // const SEED = "aaaaaaa"
     // Math.seedrandom(SEED)
 
@@ -475,27 +594,27 @@ function main(W_WIDTH = 1280, W_HEIGH = 720, POINT_QTY = 7000, IT_MAX = 3, shoul
 
     // II. DEFINE WORLD TILES
     // 1. remove some points => merge some cells
-    const oldlatitudeRatios = {
-        0 :1.0000,
-        5 :0.9986,
-        10:0.9954,
-        15:0.9900,
-        20:0.9822,
-        25:0.9730,
-        30:0.9600,
-        35:0.9427,
-        40:0.9216,
-        45:0.8962,
-        50:0.8679,
-        55:0.8350,
-        60:0.7986,
-        65:0.7597,
-        70:0.7186,
-        75:0.6732,
-        80:0.6213,
-        85:0.5722,
-        90:0.5322,
-    }
+    // const oldlatitudeRatios = {
+    //     0 :1.0000,
+    //     5 :0.9986,
+    //     10:0.9954,
+    //     15:0.9900,
+    //     20:0.9822,
+    //     25:0.9730,
+    //     30:0.9600,
+    //     35:0.9427,
+    //     40:0.9216,
+    //     45:0.8962,
+    //     50:0.8679,
+    //     55:0.8350,
+    //     60:0.7986,
+    //     65:0.7597,
+    //     70:0.7186,
+    //     75:0.6732,
+    //     80:0.6213,
+    //     85:0.5722,
+    //     90:0.5322,
+    // }
     const latitudeRatios = {
         0 :1.00,
         5 :0.99,
@@ -538,7 +657,7 @@ function main(W_WIDTH = 1280, W_HEIGH = 720, POINT_QTY = 7000, IT_MAX = 3, shoul
     }
 
     // 1.5. translate whole map
-    if(shouldReplaceMapOnTopLeft){
+    if(CONF_shouldReplaceMapOnTopLeft){
         NECorner.Translate(-widthOffset, -heighOffset)
         NWCorner.Translate(-widthOffset, -heighOffset)
         SECorner.Translate(-widthOffset, -heighOffset)
@@ -560,32 +679,32 @@ function main(W_WIDTH = 1280, W_HEIGH = 720, POINT_QTY = 7000, IT_MAX = 3, shoul
     // 2. render filtered points
     cp.points = flatWorldPoints
     const triangulation = cp.DelaunayBowyerWatson(false, 'black')
-    let worldVoronoi = []
+    let tiledWorld = []
     let neighbourhood = []
     for (let p of cp.points) {
         let poly = new PolygonVoronoi(p, cp)
         poly.BuildUp()
-        worldVoronoi.push(poly)
+        tiledWorld.push(poly)
     }
-    let fullWorldVoronoi = worldVoronoi
-    worldVoronoi = fullWorldVoronoi
+    let fullWorldVoronoi = tiledWorld
+    tiledWorld = fullWorldVoronoi
         .filter(poly => poly.center.x >= westBound && poly.center.x <= eastBound && poly.center.y >= northBound && poly.center.y <= southBound)
-    worldVoronoi.forEach(poly => cp.canvas.DrawPolygon(poly.edges, "blue", 2))
+    tiledWorld.forEach(poly => cp.canvas.DrawPolygon(poly.edges, "blue", 2))
 
     console.log("II. 2nd poly map, time :", Math.abs(time - (new Date())))
 
     // 3. calculating neighbourhood
     let orphanEdges = []
-    worldVoronoi.forEach((poly, index) => {
+    tiledWorld.forEach((poly, index) => {
         neighbourhood[index] = new Set()
         poly.edges.forEach((edge) => {
             let edgeSisterFound = false
-            for(let i = 0; i < worldVoronoi.length; i++) {
+            for(let i = 0; i < tiledWorld.length; i++) {
                 // exclude self
                 if(i === index)
                     continue
 
-                const rPoly = worldVoronoi[i]
+                const rPoly = tiledWorld[i]
 
                 for(let j = 0; j < rPoly.edges.length; j++) {
                     if(areTwoEdgesSame(edge, rPoly.edges[j])){
@@ -605,7 +724,7 @@ function main(W_WIDTH = 1280, W_HEIGH = 720, POINT_QTY = 7000, IT_MAX = 3, shoul
     })
     if(DEBUG_P2){
         // black highlight east and west tiles (from orphan edges)
-        orphanEdges.forEach(orphanEdge => cp.canvas.DrawPolygon(worldVoronoi[orphanEdge.polyIndex].edges, "black", 5))
+        orphanEdges.forEach(orphanEdge => cp.canvas.DrawPolygon(tiledWorld[orphanEdge.polyIndex].edges, "black", 5))
         // red highlight orphan edges
         orphanEdges.forEach(orphanEdge => cp.canvas.DrawStroke(orphanEdge.edge[0], orphanEdge.edge[1], "red", 5))
     }
@@ -643,7 +762,7 @@ function main(W_WIDTH = 1280, W_HEIGH = 720, POINT_QTY = 7000, IT_MAX = 3, shoul
                 || (y4 < y2 && y2 < y3)
             ){
                 neighbourhood[orphanEdge.polyIndex].add(eastOrphanEdges[i].polyIndex)
-                // cp.canvas.DrawPolygon(worldVoronoi[eastOrphanEdges[i].polyIndex].edges, "black", 3)
+                // cp.canvas.DrawPolygon(tiledWorld[eastOrphanEdges[i].polyIndex].edges, "black", 3)
                 break
             }
         }
@@ -661,7 +780,7 @@ function main(W_WIDTH = 1280, W_HEIGH = 720, POINT_QTY = 7000, IT_MAX = 3, shoul
                 || (y3 < y2 && y1 < y4)
             ){
                 neighbourhood[orphanEdge.polyIndex].add(westOrphanEdges[i].polyIndex)
-                // cp.canvas.DrawPolygon(worldVoronoi[westOrphanEdges[i].polyIndex].edges, "black", 3)
+                // cp.canvas.DrawPolygon(tiledWorld[westOrphanEdges[i].polyIndex].edges, "black", 3)
                 break
             }
         }
@@ -669,28 +788,27 @@ function main(W_WIDTH = 1280, W_HEIGH = 720, POINT_QTY = 7000, IT_MAX = 3, shoul
     
     neighbourhood = neighbourhood.map(n => Array.from(n))
     // DEBUG show neighbourhood
-    // neighbourhood.forEach((neighbours, index) => neighbours.forEach(neighbour => cp.canvas.DrawStroke(worldVoronoi[index].center, worldVoronoi[neighbour].center, "black", 2)))
+    // neighbourhood.forEach((neighbours, index) => neighbours.forEach(neighbour => cp.canvas.DrawStroke(tiledWorld[index].center, tiledWorld[neighbour].center, "black", 2)))
     console.log("II. neighbourhood calculated, time :", Math.abs(time - (new Date())))
 
 
     // III. PLATES
     const tileToPlateRatio = 5
     const neighbouringFactorToSwap = 0.4
-    const harmonizationQty = 2
-    const wishedPlateQty = 17
+    const harmonizationQty = CONF_harmonizationQty || 2
+    const wishedPlateQty = CONF_wishedPlateQty || 13
 
     let plateComponents = []
-    const colours = ["red", "green", "blue", "yellow", "cyan", "purple", "orange", "brown", "grey", "olive", "PaleVioletRed", "SkyBlue", "Violet", "Teal", "YellowGreen", "black", "Beige"]
     // 1. Plate components
-    for(let i = 0; i < worldVoronoi.length / tileToPlateRatio; i++){
+    for(let i = 0; i < tiledWorld.length / tileToPlateRatio; i++){
         plateComponents.push([[]])
-        const indexToAdd = Math.floor(Math.random() * worldVoronoi.length)
+        const indexToAdd = Math.floor(Math.random() * tiledWorld.length)
         plateComponents[i][0].push(indexToAdd)
-        worldVoronoi[indexToAdd].plateComponentId = i
+        tiledWorld[indexToAdd].plateComponentId = i
     }
-    let COUNTDOWN = 10
+    let COUNTDOWN = 100
     // for each plateComponent, ring by ring try to add a neighbour
-    while(worldVoronoi.filter(tile => tile.plateComponentId == -1).length > 0 && COUNTDOWN > 0){
+    while(tiledWorld.filter(tile => tile.plateComponentId == -1).length > 0 && COUNTDOWN > 0){
         COUNTDOWN --
         plateComponents.forEach((rings, index) => {
             let newTileAdded = false
@@ -704,8 +822,8 @@ function main(W_WIDTH = 1280, W_HEIGH = 720, POINT_QTY = 7000, IT_MAX = 3, shoul
                     const neighbours = neighbourhood[polyIndex]
                     // add all non-atributed neighbours to the ring
                     neighbours.forEach((neighbour) => {
-                        if(worldVoronoi[neighbour].plateComponentId == -1){
-                            worldVoronoi[neighbour].plateComponentId = index
+                        if(tiledWorld[neighbour].plateComponentId == -1){
+                            tiledWorld[neighbour].plateComponentId = index
                             if(rings.length - 1 == h)
                                 rings.push([])
                             rings[h+1].push(neighbour)
@@ -721,47 +839,35 @@ function main(W_WIDTH = 1280, W_HEIGH = 720, POINT_QTY = 7000, IT_MAX = 3, shoul
 
     plateComponents = plateComponents.map(p => p.flat(Infinity))
 
-    // Harmonization
-    for(let harmonizationCount = 0; harmonizationCount < harmonizationQty; harmonizationCount++){
-        worldVoronoi.forEach((tile, index) => {
-            const neighbourPlateComponentsIds = neighbourhood[index].map(neighbourIndex => worldVoronoi[neighbourIndex].plateComponentId)
-            for(let i = 0; i < neighbourPlateComponentsIds.length; i++){
-                const plateComponentId = neighbourPlateComponentsIds[i]
-                if(tile.plateComponentId == plateComponentId)
-                    continue
-                const neighbourCount = neighbourPlateComponentsIds.reduce((acc, cur) => {return acc += (cur == plateComponentId)}, 0)
-                if(neighbourCount > neighbourPlateComponentsIds.length * neighbouringFactorToSwap){
-                    const indexToRemove = plateComponents[tile.plateComponentId].indexOf(index)
-                    if(indexToRemove === -1)
-                        continue
-                    plateComponents[tile.plateComponentId].splice(indexToRemove, 1)
-                    plateComponents[plateComponentId].push(index)
-                    tile.plateComponentId = plateComponentId
-                    // cp.canvas.DrawPixle(tile.center, colours[plateComponentId % colours.length], 20 - harmonizationCount * 4)
-                    break
-                }
-            }
-        })
-    }
-
     // display plate components
     if(DEBUG_P3){
         console.log("plateComponents", plateComponents)
-        // worldVoronoi.forEach(tile => cp.canvas.DrawPixle(tile.center, colours[tile.plateComponentId % colours.length], tile.plateComponentId === -1 ? 0 : 20))
+        // tiledWorld.forEach(tile => cp.canvas.DrawPixle(tile.center, COLOURS[tile.plateComponentId % COLOURS.length], tile.plateComponentId === -1 ? 0 : 20))
     }
     
-    // 2. Generate Plates
+    // 2. Generate Plates - seeds
     let plates = plateComponents.length < wishedPlateQty ? [...plateComponents] : []
     if(plates.length === 0){
         while(plates.length < wishedPlateQty){
             plates.push([...plateComponents[Math.floor(Math.random() * plateComponents.length)]])
-            plates[plates.length -1].forEach(tileIndex => worldVoronoi[tileIndex].plateId = plates.length -1)
+            plates[plates.length -1].forEach(tileIndex => tiledWorld[tileIndex].plateId = plates.length -1)
         }
     }
 
+    const swapTilePlateId = (tileIndex, newPlateId) => {
+        const tile = tiledWorld[tileIndex]
+        if(tile.plateId === -1 || !plates[tile.plateId])
+            return
+        const indexToRemove = plates[tile.plateId].indexOf(tileIndex)
+        if(indexToRemove === -1)
+            return
+        plates[tile.plateId].splice(indexToRemove, 1)
+        plates[newPlateId].push(tileIndex)
+        tile.plateId = newPlateId
+    }
     // 3. fill plates
-    COUNTDOWN = 50
-    while(worldVoronoi.filter(tile => tile.plateId === -1).length > 0 && COUNTDOWN > 0){
+    COUNTDOWN = 100
+    while(tiledWorld.filter(tile => tile.plateId === -1).length > 0 && COUNTDOWN > 0){
         COUNTDOWN --
         plates.forEach((plate, plateIndex) => {
             let newTilesAdded = false
@@ -772,12 +878,14 @@ function main(W_WIDTH = 1280, W_HEIGH = 720, POINT_QTY = 7000, IT_MAX = 3, shoul
                  for(let j = 0; j < neighbourhood[plateTileIndex].length; j++){
                     const neighbourIndex = neighbourhood[plateTileIndex][j]
 
-                    if(worldVoronoi[neighbourIndex].plateId === -1){
+                    if(tiledWorld[neighbourIndex].plateId === -1){
                         newTilesAdded = true
 
-                        const tilesToAdd = plateComponents[worldVoronoi[neighbourIndex].plateComponentId]
+                        const tilesToAdd = plateComponents[tiledWorld[neighbourIndex].plateComponentId]
+                        if(!tilesToAdd)
+                            continue
                         plate.push(...tilesToAdd)
-                        tilesToAdd.forEach(tileIndex => worldVoronoi[tileIndex].plateId = plateIndex)
+                        tilesToAdd.forEach(tileIndex => tiledWorld[tileIndex].plateId = plateIndex)
                     }
 
                     if(newTilesAdded) break
@@ -786,20 +894,148 @@ function main(W_WIDTH = 1280, W_HEIGH = 720, POINT_QTY = 7000, IT_MAX = 3, shoul
             }
         })
     }
-    
     if(DEBUG_P3)
         console.log("countdown", COUNTDOWN)
-
     if(DEBUG_P3)
-        console.log("plates", plates)
+        console.log("plates, before harmonization", plates)
+
+    // Harmonization
+    for(let harmonizationCount = 0; harmonizationCount < harmonizationQty; harmonizationCount++){
+        tiledWorld.forEach((tile, index) => {
+            const neighbourPlateIds = neighbourhood[index].map(neighbourTileIndex => tiledWorld[neighbourTileIndex].plateId)
+            for(let i = 0; i < neighbourPlateIds.length; i++){
+                const testingPlateId = neighbourPlateIds[i]
+                if(tile.plateId == testingPlateId)
+                    continue
+                const neighbourCount = neighbourPlateIds.reduce((acc, cur) => {return acc += (cur == testingPlateId)}, 0)
+                if(neighbourCount > neighbourPlateIds.length * neighbouringFactorToSwap){
+                    swapTilePlateId(index, testingPlateId)
+                    break
+                }
+
+            }
+        })
+    }
     // display plates
-    if(DEBUG_P3)
-        worldVoronoi.forEach(tile => cp.canvas.DrawPixle(tile.center, colours[tile.plateId % colours.length], tile.plateId === -1 ? 0 : 20))
-    // worldVoronoi.forEach(tile => cp.canvas.DrawPixle(tile.center, colours[tile.plateComponentId % colours.length], tile.plateComponentId === -1 ? 0 : 10))
+    // tiledWorld.forEach(tile => cp.canvas.DrawPixle(tile.center, COLOURS[tile.plateId % COLOURS.length], tile.plateId === -1 ? 0 : 20))
     
-    
-    console.log("III. tectonic plates, time :", Math.abs(time - (new Date())))
+    plateComponents = []
+    console.log("III. Plates, time :", Math.abs(time - (new Date())))
 
+
+    // IV - Terrain generation
+    const platesType = plates.map(tiles => {
+        const isPlateOceanic = Math.random() < CONF_seaToLandRatio
+        tiles.forEach(tileIndex => {
+            tiledWorld[tileIndex].newHeight = isPlateOceanic ? 20 : 60
+            tiledWorld[tileIndex].curHeight = isPlateOceanic ? 20 : 60
+            tiledWorld[tileIndex].terrainType = isPlateOceanic ? TERRAINTYPES.water : TERRAINTYPES.earth
+        })
+        return isPlateOceanic ? TERRAINTYPES.water : TERRAINTYPES.earth
+    })
+
+
+    // // random test, get eastern tiles of plate 0
+    // const targetDirection = getRandomDirection()
+    // console.log(targetDirection)
+    // // const targetedDirections = [targetDirection]
+    // const targetedDirections = [rotateDirection(targetDirection, -1), targetDirection, rotateDirection(targetDirection, 1)]
+    // const reverseTargetedDirections = targetedDirections.map(dir => rotateDirection(dir, 4))
+    
+    // plates[0].forEach(tileIndex => {
+    //     const tile = tiledWorld[tileIndex]
+    //     neighbourhood[tileIndex].forEach(neighbourTileIndex => {
+    //         const neighbour = tiledWorld[neighbourTileIndex]
+    //         const localDirection = getDirectionBetweenTiles(tile, neighbour)
+    //         if(neighbour.plateId !== 0
+    //             && targetedDirections.indexOf(localDirection) > -1
+    //         )
+    //             cp.canvas.DrawPixle(neighbour.center, "red", 10)
+    //         if(neighbour.plateId !== 0
+    //             && reverseTargetedDirections.indexOf(localDirection) > -1
+    //         )
+    //             cp.canvas.DrawPixle(neighbour.center, "yellow", 10)
+    //     })
+    // })
+
+    const worldTectonic = () => {
+        platesDirection = platesDirection.map(direction => {
+            const rand = Math.random()
+            if(rand < 0.05)
+                return rotateDirection(direction, Math.random() < 0.5 ? -2 : 2)
+            if(rand < 0.15)
+                return rotateDirection(direction, Math.random() < 0.5 ? -1 : 1)
+            return direction
+        })
+        console.log(platesDirection)
+
+        plates.forEach((tileIndexes, plateIndex) => {
+            tileIndexes.forEach(tileIndex => {
+                const tile = tiledWorld[tileIndex]
+                for(let i = 0; i < neighbourhood[tileIndex].length; ++i) {
+                    const neighbourTileIndex = neighbourhood[tileIndex][i]
+                    const neighbour = tiledWorld[neighbourTileIndex]
+                    const localDirection = getDirectionBetweenTiles(tile, neighbour)
+
+                    
+                    // plate sliding
+                    if(neighbour.plateId === tile.plateId){
+                        if(localDirection === platesDirection[plateIndex])
+                            neighbour.newHeight = tile.curHeight // transfert tile height
+                    }else{
+                        if(areDirectionsDivergent(platesDirection[plateIndex], platesDirection[neighbour.plateId])){
+                            // cp.canvas.DrawPixle(neighbour.center, "blue", 20)
+                            if(Math.random() < 0.85)
+                                tile.newHeight -= 1
+                        }else{
+                            // if(localDirection !== platesDirection[plateIndex]) // may be too much exclusive here, may add -1 & +1 directions ?
+                            //     break
+                            // cp.canvas.DrawPixle(neighbour.center, "brown", 20)
+                            if(localDirection === platesDirection[plateIndex] && platesType[plateIndex] === TERRAINTYPES.earth && platesType[neighbour.plateId] === TERRAINTYPES.water){
+                                swapTilePlateId(neighbourTileIndex, plateIndex)
+                                neighbour.newHeight = 80
+                            }
+                            if(Math.random() < 0.5)
+                                tile.newHeight += .0
+                        }
+                    }
+                }
+            })
+        })
+        
+        // update all tiles
+        tiledWorld.forEach(tile => {
+            tile.curHeight = tile.newHeight
+            if(tile.curHeight < 60)
+                tile.terrainType = TERRAINTYPES.water
+            else if(tile.curHeight < 100)
+                tile.terrainType = TERRAINTYPES.earth
+            else
+                tile.terrainType = TERRAINTYPES.mountain
+        })
+    }
+
+    let platesDirection = plates.map(() => getRandomDirection())
+
+    
+    for(let age = 0; age < CONF_worldAge; age++){
+        displayTerrain(cp, tiledWorld)
+        displayPlates(cp, tiledWorld)
+        worldTectonic()
+        saveWorldAsImg()
+        console.log(`IV. tectonic ITE ${age}, time :`, Math.abs(time - (new Date())))
+        if(age +1 < CONF_worldAge)
+            await sleep(1000)
+    }
+
+    console.log("IV. tectonic, time :", Math.abs(time - (new Date())))
 }
 
-main(1280, 720, 14000, 3, false, false, false, true)
+main(1280, 720,
+    5000, 3,       // 14k pts, 3ité => +/- 48sec
+    true,          // replace map on top left corner
+    false,          // Phase 1
+    false,          // Phase 2
+    15, 1, false,   // Phase 3
+    .60, 20,  // Phase 4
+)
