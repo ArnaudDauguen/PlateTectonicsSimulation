@@ -533,7 +533,21 @@ async function main(W_WIDTH = 1280, W_HEIGH = 720,
         DEBUG_P2 = false,
         CONF_wishedPlateQty, CONF_harmonizationQty, DEBUG_P3 = false,
         CONF_seaToLandRatio = 0.85, CONF_worldAge = 10,
-    ) {
+        CONF_GIF_doSave = true, CONF_GIF_FPS = 3, 
+) {
+
+    // setup GIF saver
+    const canvas = document.getElementById('canvas')
+    const context = canvas.getContext("2d")
+    context.fillStyle = 'rgb(255, 255, 255)'
+    context.fillRect(0, 0, canvas.width, canvas.height) //GIF can't do transparent so do white
+
+    const encoder = new GIFEncoder()
+    encoder.setRepeat(0)
+    encoder.setDelay(Math.floor(1000 / CONF_GIF_FPS) || 333)
+    if(CONF_GIF_doSave)
+        encoder.start()
+
     // const SEED = "aaaaaaa"
     // Math.seedrandom(SEED)
 
@@ -1022,13 +1036,24 @@ async function main(W_WIDTH = 1280, W_HEIGH = 720,
         displayTerrain(cp, tiledWorld)
         displayPlates(cp, tiledWorld)
         worldTectonic()
-        saveWorldAsImg()
+        // saveWorldAsImg()
+        if(CONF_GIF_doSave)
+            encoder.addFrame(context)
         console.log(`IV. tectonic ITE ${age}, time :`, Math.abs(time - (new Date())))
         if(age +1 < CONF_worldAge)
-            await sleep(1000)
+            await sleep(333)
     }
 
     console.log("IV. tectonic, time :", Math.abs(time - (new Date())))
+
+    
+    // save GIF
+    if(CONF_GIF_doSave){
+        encoder.finish()
+        encoder.download(`thronus_map_${Date.now()}.gif`)
+        console.log("saved GIF :", Math.abs(time - (new Date())))
+    }
+
 }
 
 main(1280, 720,
@@ -1038,4 +1063,5 @@ main(1280, 720,
     false,          // Phase 2
     15, 1, false,   // Phase 3
     .60, 20,  // Phase 4
+    false, 3,  // GIF conf
 )
