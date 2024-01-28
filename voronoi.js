@@ -59,7 +59,7 @@ const TERRAINTYPES = {
     deepWater: {
         colour: "blue",
     },
-    earth: {
+    land: {
         colour: "ForestGreen",
     },
     mountain: {
@@ -88,18 +88,36 @@ function getRandomDirection(){
 function rotateDirection(input, change){
     input = input + change
     if(input < 0)
-        input += 8
-    if(input > 7)
-        input -= 8
+        input += Object.keys(DIRECTIONS).length
+    if(input > Object.keys(DIRECTIONS).length -1)
+        input -= Object.keys(DIRECTIONS).length
     return DIRECTIONS[Object.keys(DIRECTIONS).find(key => DIRECTIONS[key] === input)]
 }
 
-function areDirectionsDivergent(a, b, tolerance = 2){
-    // return (Math.max(a, b) - Math.min(a, b)) > tolerance
-    // return Math.abs(a - b) > tolerance
-    return a > b
-        ? (a - b) > tolerance
-        : (b - a) > tolerance
+function getOppositeDirection(input){
+    return rotateDirection(input, Object.keys(DIRECTIONS).length / 2)
+}
+
+function shiftDirectionRandom(initialDirection, greatSuccesChance = 0.05, minorSuccesChance = 0.2, greatSuccesValue = 2, minorSuccesValue = 1){
+    const rand = Math.random()
+        if(rand < greatSuccesChance)
+            return rotateDirection(initialDirection, Math.random() < 0.5 ? -greatSuccesValue : greatSuccesValue)
+        if(rand < minorSuccesChance)
+            return rotateDirection(initialDirection, Math.random() < 0.5 ? -minorSuccesValue : minorSuccesValue)
+        return initialDirection
+}
+
+function areDirectionsNearlyEqual(a, b, tolerance = 1){
+    const diff = Math.abs(a - b)
+    return (diff <= tolerance) || ((Object.keys(DIRECTIONS).length - diff) <= tolerance)
+}
+
+function areDirectionsOpposite(a, b, tolerance = 0){
+    return areDirectionsNearlyEqual(a, getOppositeDirection(b), tolerance)
+}
+
+function areDirectionsDivergente(a, b, tolerance = 2){
+    return areDirectionsNearlyEqual(a, getOppositeDirection(b), tolerance)
 }
 
 function getDirectionBetweenPoints(start, end){
@@ -145,15 +163,15 @@ function displayPlates(cp, tiles, size = 4){
     tiles.forEach(tile => cp.canvas.DrawPixle(tile.center, COLOURS[tile.plateId % COLOURS.length], tile.plateId === -1 ? 0 : size))
 }
 
+function displayTerrain(cp, tiles, size = 20){
+    tiles.forEach(tile => cp.canvas.DrawPixle(tile.center, tile.terrainType.colour || "black", size))
+}
+
 function saveWorldAsImg(){
     const canvas = document.getElementById('canvas')
     let img = new Image()
     img.src = canvas.toDataURL()
     document.body.append(img)
-}
-
-function displayTerrain(cp, tiles, size = 20){
-    tiles.forEach(tile => cp.canvas.DrawPixle(tile.center, tile.terrainType.colour || "black", size))
 }
 
 class PolygonVoronoi {
@@ -531,8 +549,8 @@ async function main(W_WIDTH = 1280, W_HEIGH = 720,
         CONF_shouldReplaceMapOnTopLeft = false,
         DEBUG_P1 = false,
         DEBUG_P2 = false,
-        CONF_wishedPlateQty, CONF_harmonizationQty, DEBUG_P3 = false,
-        CONF_seaToLandRatio = 0.85, CONF_worldAge = 10,
+        DEBUG_P3 = false, CONF_wishedPlateQty, CONF_harmonizationQty,
+        DEBUG_P4 = false, CONF_seaToLandRatio = 0.85, CONF_worldAge = 10, CONF_seaLevel = 60, CONF_mountainLevel = 100, CONF_baseWaterTileHeight = 20, CONF_baseLandTileHeight = 80, CONF_simulation_fps = 3,
         CONF_GIF_doSave = true, CONF_GIF_FPS = 3, 
 ) {
 
@@ -938,110 +956,190 @@ async function main(W_WIDTH = 1280, W_HEIGH = 720,
 
 
     // IV - Terrain generation
+    // initial setup
     const platesType = plates.map(tiles => {
         const isPlateOceanic = Math.random() < CONF_seaToLandRatio
         tiles.forEach(tileIndex => {
-            tiledWorld[tileIndex].newHeight = isPlateOceanic ? 20 : 60
-            tiledWorld[tileIndex].curHeight = isPlateOceanic ? 20 : 60
-            tiledWorld[tileIndex].terrainType = isPlateOceanic ? TERRAINTYPES.water : TERRAINTYPES.earth
+            tiledWorld[tileIndex].newHeight = isPlateOceanic ? CONF_baseWaterTileHeight : CONF_baseLandTileHeight
+            tiledWorld[tileIndex].curHeight = isPlateOceanic ? CONF_baseWaterTileHeight : CONF_baseLandTileHeight
+            tiledWorld[tileIndex].terrainType = isPlateOceanic ? TERRAINTYPES.water : TERRAINTYPES.land
         })
-        return isPlateOceanic ? TERRAINTYPES.water : TERRAINTYPES.earth
+        return isPlateOceanic ? TERRAINTYPES.water : TERRAINTYPES.land
     })
+    let platesDirection = plates.map(() => getRandomDirection())
 
-
-    // // random test, get eastern tiles of plate 0
-    // const targetDirection = getRandomDirection()
-    // console.log(targetDirection)
-    // // const targetedDirections = [targetDirection]
-    // const targetedDirections = [rotateDirection(targetDirection, -1), targetDirection, rotateDirection(targetDirection, 1)]
-    // const reverseTargetedDirections = targetedDirections.map(dir => rotateDirection(dir, 4))
-    
-    // plates[0].forEach(tileIndex => {
-    //     const tile = tiledWorld[tileIndex]
-    //     neighbourhood[tileIndex].forEach(neighbourTileIndex => {
-    //         const neighbour = tiledWorld[neighbourTileIndex]
-    //         const localDirection = getDirectionBetweenTiles(tile, neighbour)
-    //         if(neighbour.plateId !== 0
-    //             && targetedDirections.indexOf(localDirection) > -1
-    //         )
-    //             cp.canvas.DrawPixle(neighbour.center, "red", 10)
-    //         if(neighbour.plateId !== 0
-    //             && reverseTargetedDirections.indexOf(localDirection) > -1
-    //         )
-    //             cp.canvas.DrawPixle(neighbour.center, "yellow", 10)
-    //     })
-    // })
+    const filterNeighboursByDirection = (originTile, neighbours, wishedDirection, tolerance = 0) => {
+        return neighbours.filter(neighbourIndex => {
+            const neighbourTile = tiledWorld[neighbourIndex]
+            const localDirection = getDirectionBetweenTiles(originTile, neighbourTile)
+            return areDirectionsNearlyEqual(wishedDirection, localDirection, tolerance)
+        })
+    }
 
     const worldTectonic = () => {
-        platesDirection = platesDirection.map(direction => {
-            const rand = Math.random()
-            if(rand < 0.05)
-                return rotateDirection(direction, Math.random() < 0.5 ? -2 : 2)
-            if(rand < 0.15)
-                return rotateDirection(direction, Math.random() < 0.5 ? -1 : 1)
-            return direction
-        })
-        console.log(platesDirection)
+        if(DEBUG_P4)
+            console.log("plates direction", platesDirection)
 
-        plates.forEach((tileIndexes, plateIndex) => {
+        let tilesMarkedToSwap = []
+
+        plates.forEach((tileIndexes, plateId) => {
+            const plateDirection = platesDirection[plateId]
+            const plateType = platesType[plateId]
             tileIndexes.forEach(tileIndex => {
                 const tile = tiledWorld[tileIndex]
-                for(let i = 0; i < neighbourhood[tileIndex].length; ++i) {
-                    const neighbourTileIndex = neighbourhood[tileIndex][i]
-                    const neighbour = tiledWorld[neighbourTileIndex]
-                    const localDirection = getDirectionBetweenTiles(tile, neighbour)
 
+                // Searching neighbours following plate direction
+                let frontingNeighbours = filterNeighboursByDirection(tile, neighbourhood[tileIndex], plateDirection, 0)
+                if(frontingNeighbours.length <= 0){
+                    frontingNeighbours = filterNeighboursByDirection(tile, neighbourhood[tileIndex], plateDirection, 1)
+                    // if no neighbours found within 1 direction tolerance, skip this tile
+                    if(frontingNeighbours.length <= 0)
+                        return false
+                }
+
+                frontingNeighbours.forEach(neighbourTileIndex => {
+                    const neighbour = tiledWorld[neighbourTileIndex]
+                    const neighbourPlateId = neighbour.plateId
                     
-                    // plate sliding
-                    if(neighbour.plateId === tile.plateId){
-                        if(localDirection === platesDirection[plateIndex])
-                            neighbour.newHeight = tile.curHeight // transfert tile height
-                    }else{
-                        if(areDirectionsDivergent(platesDirection[plateIndex], platesDirection[neighbour.plateId])){
-                            // cp.canvas.DrawPixle(neighbour.center, "blue", 20)
-                            if(Math.random() < 0.85)
-                                tile.newHeight -= 1
-                        }else{
-                            // if(localDirection !== platesDirection[plateIndex]) // may be too much exclusive here, may add -1 & +1 directions ?
-                            //     break
-                            // cp.canvas.DrawPixle(neighbour.center, "brown", 20)
-                            if(localDirection === platesDirection[plateIndex] && platesType[plateIndex] === TERRAINTYPES.earth && platesType[neighbour.plateId] === TERRAINTYPES.water){
-                                swapTilePlateId(neighbourTileIndex, plateIndex)
-                                neighbour.newHeight = 80
-                            }
-                            if(Math.random() < 0.5)
-                                tile.newHeight += .0
+                    //// neighbour is within same plate as curent tile
+                    if(neighbourPlateId === plateId){
+                        //TODO split curentHeigh between each frontier tiles
+                        //TODO manage mountains merging witin the plate
+
+                        // transfert tile height
+                        if(/*neighbour.curHeight > CONF_seaLevel && */tile.curHeight <= CONF_seaLevel)
+                            neighbour.newHeight = neighbour.curHeight + Math.floor((tile.curHeight - neighbour.curHeight) * 0.3)
+                        else
+                            neighbour.newHeight = tile.curHeight//neighbour.curHeight + Math.floor((tile.curHeight - neighbour.curHeight) * 1.0)
+                        return true
+                    }
+                    
+                    //// neighbour is in an other plate
+                    // plate frontier management !
+                    const neighbourPlateType = platesType[neighbourPlateId]
+                    // if continental goes over oceanic, eat the oceanic one
+                    if(plateType === TERRAINTYPES.land && neighbourPlateType === TERRAINTYPES.water){
+                        neighbour.newHeight = tile.curHeight // transfert tile height
+                        //TODO correct manage of subduction, slight increase of height
+                        if(Math.random() < 0.8)
+                            neighbour.newHeight += 30
+                        tilesMarkedToSwap.push({tile: neighbourTileIndex, newPlateId: plateId})
+                        return true
+                    }
+
+                    const neighbourPlateDirection = platesDirection[neighbourPlateId]
+
+                    // if oceanic goes over continental that is above water, raise level, else, forget about it
+                    if(plateType === TERRAINTYPES.water && neighbourPlateType === TERRAINTYPES.land && neighbour.curHeight < CONF_seaLevel){
+                        // if colliding, moutains
+                        if(areDirectionsOpposite(plateDirection, neighbourPlateDirection, 0)){
+                            if(Math.random() < 0.8)
+                                neighbour.newHeight = neighbour.curHeight + 20
+                            return true
+                        }
+                        // if sliding, moutains (low)
+                        if(areDirectionsOpposite(plateDirection, neighbourPlateDirection, 1)){
+                            if(Math.random() < 0.8)
+                                neighbour.newHeight = neighbour.curHeight + 10
+                            return true
                         }
                     }
-                }
+                    
+                    // if same type of plate...
+                    if(plateType === neighbourPlateType){
+                        // if colliding, moutains
+                        if(areDirectionsOpposite(plateDirection, neighbourPlateDirection, 0)){
+                            if(Math.random() < 0.7)
+                                neighbour.newHeight = neighbour.curHeight + 40
+                            return true
+                        }
+                        // if sliding, moutains (low)
+                        if(areDirectionsOpposite(plateDirection, neighbourPlateDirection, 1)){
+                            if(Math.random() < 0.5)
+                                neighbour.newHeight = neighbour.curHeight + 20
+                            return true
+                        }
+                    }
+                    
+                })
+
+                ////// OLD RANDOM TESTING STUFF
+                // for(let i = 0; i < neighbourhood[tileIndex].length; ++i) {
+                //     const neighbourTileIndex = neighbourhood[tileIndex][i]
+                //     const neighbour = tiledWorld[neighbourTileIndex]
+                //     const localDirection = getDirectionBetweenTiles(tile, neighbour)
+
+                    
+                //     // INSIDE plate
+                //     if(neighbour.plateId === tile.plateId){
+                //         if(localDirection === platesDirection[plateId])
+                //             neighbour.newHeight = tile.curHeight // transfert tile height
+                //     // NEIGHBOUR plate
+                //     }else{
+                //         // DIVERGENT
+                //         if(areDirectionsDivergente(platesDirection[plateId], platesDirection[neighbour.plateId])){
+                //             // cp.canvas.DrawPixle(neighbour.center, "blue", 20)
+                //             if(Math.random() < 0.85)
+                //                 tile.newHeight = tile.curHeight - 1
+                //         // CONVERGENT
+                //         }else{
+                //             // if(localDirection !== platesDirection[plateId]) // may be too much exclusive here, may add -1 & +1 directions ?
+                //             //     break
+                //             // cp.canvas.DrawPixle(neighbour.center, "brown", 20)
+                //             if(localDirection === platesDirection[plateId] && platesType[plateId] === TERRAINTYPES.land && platesType[neighbour.plateId] === TERRAINTYPES.water){
+                //                 swapTilePlateId(neighbourTileIndex, plateId)
+                //                 neighbour.newHeight = 80
+                //             }
+                //             if(Math.random() < 0.5)
+                //                 tile.newHeight + tile.curHeight +.0
+                //         }
+                //     }
+                // }
             })
         })
+
+        tilesMarkedToSwap.forEach(toSwap => swapTilePlateId(toSwap.tile, toSwap.newPlateId))
         
         // update all tiles
         tiledWorld.forEach(tile => {
-            tile.curHeight = tile.newHeight
-            if(tile.curHeight < 60)
+            if(tile.newHeight != -1)
+                tile.curHeight = tile.newHeight
+            else
+                tile.curHeight = Math.max(tile.curHeight - Math.floor(Math.random() * 10), 20)
+            tile.newHeight = -1 //CONF_baseWaterTileHeight
+
+            //TODO erosion, fake version
+            // if(tile.curHeight > CONF_seaLevel + 30)
+            if(tile.curHeight > 100)
+                tile.curHeight -= Math.floor((tile.curHeight - CONF_seaLevel) * 0.075)
+
+            if(tile.curHeight < 0)
+                tile.terrainType = TERRAINTYPES.undefined
+            else if(tile.curHeight < CONF_seaLevel)
                 tile.terrainType = TERRAINTYPES.water
-            else if(tile.curHeight < 100)
-                tile.terrainType = TERRAINTYPES.earth
+            else if(tile.curHeight < CONF_mountainLevel)
+                tile.terrainType = TERRAINTYPES.land
             else
                 tile.terrainType = TERRAINTYPES.mountain
         })
     }
 
-    let platesDirection = plates.map(() => getRandomDirection())
 
     
     for(let age = 0; age < CONF_worldAge; age++){
-        displayTerrain(cp, tiledWorld)
-        displayPlates(cp, tiledWorld)
+        displayTerrain(cp, tiledWorld, 20)
+        // displayPlates(cp, tiledWorld, 4)
+        platesDirection = platesDirection.map(direction => shiftDirectionRandom(direction, 0.02, 0.15))
         worldTectonic()
         // saveWorldAsImg()
+
         if(CONF_GIF_doSave)
             encoder.addFrame(context)
-        console.log(`IV. tectonic ITE ${age}, time :`, Math.abs(time - (new Date())))
+        if(DEBUG_P4)
+            console.log(`IV. tectonic ITE ${age}, time :`, Math.abs(time - (new Date())))
+
         if(age +1 < CONF_worldAge)
-            await sleep(333)
+            await sleep((1000 / CONF_simulation_fps) || 333)
     }
 
     console.log("IV. tectonic, time :", Math.abs(time - (new Date())))
@@ -1057,11 +1155,11 @@ async function main(W_WIDTH = 1280, W_HEIGH = 720,
 }
 
 main(1280, 720,
-    5000, 3,       // 14k pts, 3ité => +/- 48sec
+    15000, 3,       // 14k pts, 3ité => +/- 48sec
     true,          // replace map on top left corner
     false,          // Phase 1
     false,          // Phase 2
-    15, 1, false,   // Phase 3
-    .60, 20,  // Phase 4
-    false, 3,  // GIF conf
+    false, 19, 1,   // Phase 3
+    false, .75, 59, 60, 140, 20, 80, 8, // Phase 4
+    true, 8,  // GIF conf
 )
