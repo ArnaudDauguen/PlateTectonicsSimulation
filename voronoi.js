@@ -563,6 +563,7 @@ async function main(W_WIDTH = 1280, W_HEIGH = 720,
     const encoder = new GIFEncoder()
     encoder.setRepeat(0)
     encoder.setDelay(Math.floor(1000 / CONF_GIF_FPS) || 333)
+    encoder.willReadFrequently = true
     if(CONF_GIF_doSave)
         encoder.start()
 
@@ -1016,7 +1017,18 @@ async function main(W_WIDTH = 1280, W_HEIGH = 720,
                     
                     //// neighbour is in an other plate
                     // plate frontier management !
+                    const neighbourPlateDirection = platesDirection[neighbourPlateId]
                     const neighbourPlateType = platesType[neighbourPlateId]
+
+                    // if plates are following each other, swap plate and low chance of raising height
+                    if(areDirectionsNearlyEqual(plateDirection, neighbourPlateDirection, 1)){
+                        neighbour.newHeight = tile.curHeight
+                        if(Math.random() < 0.1)
+                            neighbour.newHeight += 5
+                        tilesMarkedToSwap.push({tile: neighbourTileIndex, newPlateId: plateId})
+                        return true
+                    }
+
                     // if continental goes over oceanic, eat the oceanic one
                     if(plateType === TERRAINTYPES.land && neighbourPlateType === TERRAINTYPES.water){
                         neighbour.newHeight = tile.curHeight // transfert tile height
@@ -1026,8 +1038,6 @@ async function main(W_WIDTH = 1280, W_HEIGH = 720,
                         tilesMarkedToSwap.push({tile: neighbourTileIndex, newPlateId: plateId})
                         return true
                     }
-
-                    const neighbourPlateDirection = platesDirection[neighbourPlateId]
 
                     // if oceanic goes over continental that is above water, raise level, else, forget about it
                     if(plateType === TERRAINTYPES.water && neighbourPlateType === TERRAINTYPES.land && neighbour.curHeight < CONF_seaLevel){
@@ -1062,39 +1072,7 @@ async function main(W_WIDTH = 1280, W_HEIGH = 720,
                     }
                     
                 })
-
-                ////// OLD RANDOM TESTING STUFF
-                // for(let i = 0; i < neighbourhood[tileIndex].length; ++i) {
-                //     const neighbourTileIndex = neighbourhood[tileIndex][i]
-                //     const neighbour = tiledWorld[neighbourTileIndex]
-                //     const localDirection = getDirectionBetweenTiles(tile, neighbour)
-
-                    
-                //     // INSIDE plate
-                //     if(neighbour.plateId === tile.plateId){
-                //         if(localDirection === platesDirection[plateId])
-                //             neighbour.newHeight = tile.curHeight // transfert tile height
-                //     // NEIGHBOUR plate
-                //     }else{
-                //         // DIVERGENT
-                //         if(areDirectionsDivergente(platesDirection[plateId], platesDirection[neighbour.plateId])){
-                //             // cp.canvas.DrawPixle(neighbour.center, "blue", 20)
-                //             if(Math.random() < 0.85)
-                //                 tile.newHeight = tile.curHeight - 1
-                //         // CONVERGENT
-                //         }else{
-                //             // if(localDirection !== platesDirection[plateId]) // may be too much exclusive here, may add -1 & +1 directions ?
-                //             //     break
-                //             // cp.canvas.DrawPixle(neighbour.center, "brown", 20)
-                //             if(localDirection === platesDirection[plateId] && platesType[plateId] === TERRAINTYPES.land && platesType[neighbour.plateId] === TERRAINTYPES.water){
-                //                 swapTilePlateId(neighbourTileIndex, plateId)
-                //                 neighbour.newHeight = 80
-                //             }
-                //             if(Math.random() < 0.5)
-                //                 tile.newHeight + tile.curHeight +.0
-                //         }
-                //     }
-                // }
+                
             })
         })
 
@@ -1113,6 +1091,7 @@ async function main(W_WIDTH = 1280, W_HEIGH = 720,
             if(tile.curHeight > 100)
                 tile.curHeight -= Math.floor((tile.curHeight - CONF_seaLevel) * 0.075)
 
+            // atribute new TERRAINTYPES according to tile height
             if(tile.curHeight < 0)
                 tile.terrainType = TERRAINTYPES.undefined
             else if(tile.curHeight < CONF_seaLevel)
@@ -1160,6 +1139,6 @@ main(1280, 720,
     false,          // Phase 1
     false,          // Phase 2
     false, 19, 1,   // Phase 3
-    false, .75, 59, 60, 140, 20, 80, 8, // Phase 4
+    false, .80, 42, 60, 140, 20, 80, 8, // Phase 4
     true, 8,  // GIF conf
 )
